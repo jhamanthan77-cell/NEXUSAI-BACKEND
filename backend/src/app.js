@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import chat from "./models/chat.js";
+import mongoose from "mongoose";
+import generateAIResponse from "./service/ai_service.js";
  const app= express();
  app.use(cors());
  app.use(express.json());
@@ -24,6 +26,7 @@ import chat from "./models/chat.js";
 
  app.post("/api/v1/chat", async (req,res)=>{
     try{
+      //validate user message
       const{message}=req.body;
       if(typeof message !== "string" || !message.trim()){
         return res.status(400).json({
@@ -31,9 +34,13 @@ import chat from "./models/chat.js";
          message:"Message is required and cannot be empty"
         });
       }
+      //generate AI response
+      const aiResponse=await generateAIResponse(message);
+//save chat message and AI response to database
+
       const newchat =await chat.create({
          userMessage:message,
-         aiResponse:"AI integeration is coming soon"
+         aiResponse:aiResponse
       })
       res.status(201).json({
          success:true,
@@ -45,7 +52,8 @@ import chat from "./models/chat.js";
       console .error("Error is api/v1/chat route endpoint",error);
       res.status(500).json({
          success:false,
-         message :"Failed to save chat"
+         message :"Failed to save chat and generate AI response"
+         
 
       })
     }
@@ -87,5 +95,100 @@ import chat from "./models/chat.js";
             message:"failed to fetch chat messages"
          })
       }
+})
+
+
+//delete chat message by id
+app.delete("/api/v1/chat/:id", async(req,res)=>{
+   try{
+      const UserID=req.params.id;
+      // const {id}=req.params; is same as const UserID=req.params.id;
+      //validate mongoose object id
+      if(!mongoose.Types.ObjectId.isValid(UserID)){
+         return res.status(400).json({
+            success:false,
+            message:"Invalid chat ID"
+         });
+      }  
+               
+const DeletedChat= await chat.findByIdAndDelete(UserID);
+// if chat does not exist
+if(!DeletedChat){
+   return res.status(404).json({
+      success:false,
+      message:"chat not found"
+
+         });
+      
+   }
+   // if chat delete 
+   return res.status(200).json ({
+      success:true,
+      message:"chat delete successfully",
+      data:DeletedChat
+   })
+} catch(error){
+   console.log("Error deleting chat:", error);
+   return res.status(500).json ({
+      success:false,
+      message:"failed to delete chat"
+   })
+   
+}
+})
+
+
+
+//
+app.patch("/api/v1/chat/:id", async(req,res)=>{
+
+   try {
+      //to get user id:
+      const UserId=req.params.id;
+      // to get usermessage;
+      const{userMessage}=req.body;
+      // to validate id
+      if(!mongoose.Types.ObjectId. isValid(UserId)){
+         return res.status(400).json({
+            success:false,
+            message:"invalid chat Id"
+         });
+      }
+        //message validdate 
+         if(typeof userMessage!=="string"|| !userMessage.trim()){
+         return res.status(400).json({
+            success:false,
+            message:"User message is required"
+         });
+         }
+         //message updation
+         const updatedChat = await chat.findByIdAndUpdate(
+      UserId,
+      { userMessage: userMessage.trim() },
+      { new: true, runValidators: true }
+    );
+    //chat not found
+    if(!updatedChat){
+      return res.status(404).json({
+         success:false,
+         message:"chat not found"
+      })
+    }
+    //success updation
+return res.status(200).json({
+   success:true,
+   message:"chat updated successfully",
+   data:updatedChat
+})
+      
+      
+   } catch (error) {
+      console.log("Error in updating the chat",error)
+      return res.status(500).json({
+         success:false,
+         message:"failed to update the chat"
+      })
+      
+   }
 })
 export default app;
