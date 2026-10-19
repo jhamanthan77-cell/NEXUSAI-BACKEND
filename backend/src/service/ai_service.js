@@ -3,8 +3,7 @@ import dotenv from "dotenv";
 
 dotenv.config({override: true});
 console.log("GROQ key loaded:", Boolean(process.env.GROQ_API_KEY));
-console.log("GROQ key loaded:", Boolean(process.env.GROQ_API_KEY));
-console.log("GROQ key length:", process.env.GROQ_API_KEY?.length);
+
 
 const ai = new OpenAI({
     baseURL: "https://api.groq.com/openai/v1",

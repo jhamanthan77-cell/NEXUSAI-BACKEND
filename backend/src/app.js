@@ -3,9 +3,11 @@ import cors from "cors";
 import chat from "./models/chat.js";
 import mongoose from "mongoose";
 import generateAIResponse from "./service/ai_service.js";
+import authRouter from "../routes/auth.js";
  const app= express();
  app.use(cors());
  app.use(express.json());
+ app.use ("/api/v1/auth", authRouter);
  //first api route / represents the root route of the application. When a GET request is made to this route, the server responds with a simple message "hello from nexusai backend". This is useful for testing if the server is running correctly and can handle requests.
  app.get("/", (req,res)=>{
     res.send("hello from nexusai backend")
@@ -161,11 +163,17 @@ app.patch("/api/v1/chat/:id", async(req,res)=>{
             message:"User message is required"
          });
          }
+        const aiResponse = await generateAIResponse(userMessage.trim());
          //message updation
          const updatedChat = await chat.findByIdAndUpdate(
       UserId,
-      { userMessage: userMessage.trim() },
-      { new: true, runValidators: true }
+      { userMessage: userMessage.trim(), 
+         aiResponse: aiResponse
+      },
+      {
+         returnDocument:"after",
+         runValidators:true
+      }
     );
     //chat not found
     if(!updatedChat){
@@ -191,4 +199,90 @@ return res.status(200).json({
       
    }
 })
+
+
+// Search API with Pagination
+app.get("/api/v1/chat/search", async (req, res) => {
+    try {
+        // 1. Get keyword
+        const keyword = req.query.keyword;
+
+        if (typeof keyword !== "string" || !keyword.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Keyword is required"
+            });
+        }
+
+        // 2. Get pagination values
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(
+            100,
+            Math.max(1, parseInt(req.query.limit) || 10)
+        );
+
+        // 3. Create search query
+        const searchQuery = {
+            $or: [
+                {
+                    userMessage: {
+                        $regex: keyword.trim(),
+                        $options: "i"
+                    }
+                },
+                {
+                    aiResponse: {
+                        $regex: keyword.trim(),
+                        $options: "i"
+                    }
+                }
+            ]
+        };
+
+        // 4. Count all matching chats
+        const totalChats = await chat.countDocuments(searchQuery);
+
+        // 5. Calculate total pages
+        const totalPages = Math.ceil(totalChats / limit);
+
+        // 6. Validate requested page
+        if (totalPages > 0 && page > totalPages) {
+            return res.status(400).json({
+                success: false,
+                message: "Page number exceeds total pages"
+            });
+        }
+
+        // 7. Calculate skip
+        const skip = (page - 1) * limit;
+
+        // 8. Fetch matching chats for this page
+        const chats = await chat.find(searchQuery)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        // 9. Send response
+        return res.status(200).json({
+            success: true,
+            data: chats,
+            page: page,
+            limit: limit,
+            totalChats: totalChats,
+            totalPages: totalPages,
+            hasNextPage: page < totalPages,
+            hasPreviousPage: page > 1
+        });
+
+    } catch (error) {
+        console.error("Error in searching data:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Error in searching data"
+        });
+    }
+});
+
+
 export default app;
