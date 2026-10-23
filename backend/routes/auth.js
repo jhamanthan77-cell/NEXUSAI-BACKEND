@@ -8,14 +8,24 @@ import jwt from "jsonwebtoken"
     router.post("/register", async (req, res) => {
     try {
         const{name,email,password}=req.body;
-        if(!name||!password||!email){
+       if (!name.trim() || !email.trim() || !password){
             return res.status(400).json({
                 success:false,
-                message:"name.email.password is required"
+                message:"Name,Email and password is required"
             })
-        }
+        } 
+        if (password.length < 8) {
+    return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long"
+    });
+}
         const normalizedEmail = email.trim().toLowerCase();
-        const ExistingUser= await User.findOne({email})
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const ExistingUser= await User.findOne({ 
+            email:normalizedEmail
+
+        })
         if(ExistingUser){
             return res.status(409).json({
                 success:false,
@@ -24,7 +34,8 @@ import jwt from "jsonwebtoken"
         }
          const HashedPassword=await bcrypt.hash(password,10)
          const NewUser=await User.create({
-            name,email,
+            name:name.trim(),
+            email:normalizedEmail,
              password:HashedPassword,
              
          })

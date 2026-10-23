@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
 import chat from "./models/chat.js";
-import mongoose from "mongoose";
+import mongoose, { sanitizeFilter } from "mongoose";
 import generateAIResponse from "./service/ai_service.js";
 import authRouter from "../routes/auth.js";
+import authmiddleware from "../middleware/authmiddleware.js";
  const app= express();
  app.use(cors());
  app.use(express.json());
@@ -15,7 +16,7 @@ import authRouter from "../routes/auth.js";
 
 
  //health check API
- app.get("/api/v1/health",(req,res)=>{
+ app.get("/api/v1/health",async(req,res)=>{
    res.status(200).json({
      success:true,
     message:"NexusAI backend is running fine",
@@ -26,7 +27,7 @@ import authRouter from "../routes/auth.js";
    })
  })
 
- app.post("/api/v1/chat", async (req,res)=>{
+ app.post("/api/v1/chat",authmiddleware, async (req,res)=>{
     try{
       //validate user message
       const{message}=req.body;
@@ -42,7 +43,8 @@ import authRouter from "../routes/auth.js";
 
       const newchat =await chat.create({
          userMessage:message,
-         aiResponse:aiResponse
+         aiResponse:aiResponse,
+         user: req.user.userId
       })
       res.status(201).json({
          success:true,
@@ -62,11 +64,13 @@ import authRouter from "../routes/auth.js";
  })
 
 
- app.get("/api/v1/chat",async(req,res)=>{
+ app.get("/api/v1/chat",authmiddleware,async(req,res)=>{
    try{
       const page= Math.max(1, parseInt(req.query.page) || 1);
       const limit= Math.min(100,Math.max(1, parseInt(req.query.limit) || 10));
-      const totalchats=await chat.countDocuments();
+      const filter = { user: req.user.userId };
+      const totalchats=await chat.countDocuments(filter);
+      
       const totalPages=Math.ceil(totalchats/limit);
       if( totalPages>0&&page>totalPages){
          return res.status(400).json({
@@ -75,7 +79,7 @@ import authRouter from "../routes/auth.js";
          })
       }
       const skip=(page-1)*limit;
-      const chats=await chat.find().sort({createdAt:-1})
+      const chats=await chat.find(filter ).sort({createdAt:-1})
       .skip(skip)
       .limit(limit)
       res.status(200).json({
@@ -101,7 +105,7 @@ import authRouter from "../routes/auth.js";
 
 
 //delete chat message by id
-app.delete("/api/v1/chat/:id", async(req,res)=>{
+app.delete("/api/v1/chat/:id",authmiddleware, async(req,res)=>{
    try{
       const UserID=req.params.id;
       // const {id}=req.params; is same as const UserID=req.params.id;
@@ -113,7 +117,10 @@ app.delete("/api/v1/chat/:id", async(req,res)=>{
          });
       }  
                
-const DeletedChat= await chat.findByIdAndDelete(UserID);
+const DeletedChat= await chat.findOneAndDelete({
+   _id:UserID,
+   user: req.user.userId
+});
 // if chat does not exist
 if(!DeletedChat){
    return res.status(404).json({
@@ -141,14 +148,21 @@ if(!DeletedChat){
 
 
 
-//
-app.patch("/api/v1/chat/:id", async(req,res)=>{
+
+app.patch("/api/v1/chat/:id",authmiddleware,async(req,res)=>{
 
    try {
       //to get user id:
       const UserId=req.params.id;
       // to get usermessage;
-      const{userMessage}=req.body;
+      if (!req.body || typeof req.body !== "object") {
+  return res.status(400).json({
+    success: false,
+    message: "Request body is required"
+  });
+}
+
+const { userMessage } = req.body;
       // to validate id
       if(!mongoose.Types.ObjectId. isValid(UserId)){
          return res.status(400).json({
@@ -165,8 +179,11 @@ app.patch("/api/v1/chat/:id", async(req,res)=>{
          }
         const aiResponse = await generateAIResponse(userMessage.trim());
          //message updation
-         const updatedChat = await chat.findByIdAndUpdate(
-      UserId,
+         const updatedChat = await chat.findOneAndUpdate({
+           _id: UserId,
+        user: req.user.userId,
+         },
+      
       { userMessage: userMessage.trim(), 
          aiResponse: aiResponse
       },
@@ -202,7 +219,7 @@ return res.status(200).json({
 
 
 // Search API with Pagination
-app.get("/api/v1/chat/search", async (req, res) => {
+app.get("/api/v1/chat/search", authmiddleware,async (req, res) => {
     try {
         // 1. Get keyword
         const keyword = req.query.keyword;
@@ -223,6 +240,7 @@ app.get("/api/v1/chat/search", async (req, res) => {
 
         // 3. Create search query
         const searchQuery = {
+         user:req.user.userId,
             $or: [
                 {
                     userMessage: {
@@ -240,7 +258,7 @@ app.get("/api/v1/chat/search", async (req, res) => {
         };
 
         // 4. Count all matching chats
-        const totalChats = await chat.countDocuments(searchQuery);
+        const totalChats = await chat.countDocuments(searchQuery)
 
         // 5. Calculate total pages
         const totalPages = Math.ceil(totalChats / limit);
