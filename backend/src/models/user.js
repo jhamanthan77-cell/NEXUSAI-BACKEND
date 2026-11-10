@@ -15,6 +15,18 @@ email:{
 password:{
     type:String,
     required:true,
+},
+isEmailVerified:{
+    type:Boolean,
+    default:false
+},
+emailOtpHash:{
+    type:String,
+    default:null
+},
+emailOtpExpires:{
+    type:Date,
+    default:null
 }
 
 },

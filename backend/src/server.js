@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
-dotenv.config();
 
+dotenv.config();
 import connectDB from "./db.js";
 import app from "./app.js";
 
@@ -10,12 +10,11 @@ const startServer = async () => {
     try {
         await connectDB();
 
-        console.log("MongoDB connected successfully");
-        console.log("Starting Express server...");
+        
 
-        const server = app.listen(PORT, "127.0.0.1", () => {
+        const server = app.listen(PORT, "0.0.0.0", () => {
             console.log("Express server is listening!");
-            console.log(`URL: http://127.0.0.1:${PORT}`);
+            console.log(`URL: http://0.0.0.0:${PORT}`);
         });
 
         server.on("error", (error) => {
